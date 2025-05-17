@@ -106,57 +106,19 @@ sp_helpfilegroup secundario;
 CREATE PROCEDURE CreateCustomDatabase
     @dbname sysname,                -- Nombre de la base de datos
     @datafilename nvarchar(260),   -- Ruta completa del archivo de datos (.mdf)
-    @logfilename nvarchar(260),     -- Ruta completa del archivo de log (.ldf)
     @datasizeMB int,                -- Tamaño inicial del archivo de datos (MB)
-    @logsizeMB int,                 -- Tamaño inicial del archivo de log (MB)
-    @filegrowthPercent int,         -- Porcentaje de crecimiento automático (ej: 25)
-    @maxsizeMB int                  -- Tamaño máximo del archivo de datos (MB)
-AS
-BEGIN
-    SET NOCOUNT ON;
-    
-    DECLARE @sql nvarchar(max);
-    
-    -- Construir el comando SQL dinámico
-    SET @sql = 
-        N'CREATE DATABASE ' + QUOTENAME(@dbname) + N' ' +
-        N'ON PRIMARY ' +
-        N'( ' +
-        N'    NAME = ' + QUOTENAME(@dbname + N'_Data') + N', ' + -- Nombre lógico del archivo de datos
-        N'    FILENAME = ''' + @datafilename + N''', ' +
-        N'    SIZE = ' + CAST(@datasizeMB AS nvarchar) + N'MB, ' +
-        N'    FILEGROWTH = ' + CAST(@filegrowthPercent AS nvarchar) + N'%, ' +
-        N'    MAXSIZE = ' + CAST(@maxsizeMB AS nvarchar) + N'MB ' +
-        N') ' +
-        N'LOG ON ' +
-        N'( ' +
-        N'    NAME = ' + QUOTENAME(@dbname + N'_Log') + N', ' + -- Nombre lógico del archivo de log
-        N'    FILENAME = ''' + @logfilename + N''', ' +
-        N'    SIZE = ' + CAST(@logsizeMB AS nvarchar) + N'MB, ' +
-        N'    FILEGROWTH = ' + CAST(@filegrowthPercent AS nvarchar) + N'% ' +
-        N');';
-
-    -- Ejecutar el comando
-    EXEC sp_executesql @sql;
-END;
-
-CREATE PROCEDURE CreateCustomDatabase
-    @dbname sysname,                -- Nombre de la base de datos
-    @datafilename nvarchar(260),   -- Ruta completa del archivo de datos (.mdf)
-    @logfilename nvarchar(260),     -- Ruta completa del archivo de log (.ldf)
-    @datasizeMB int,                -- Tamaño inicial del archivo de datos (MB)
-    @logsizeMB int,                 -- Tamaño inicial del archivo de log (MB)
     @datafilegrowthMB int = NULL,   -- Crecimiento del archivo de datos en MB (opcional)
     @datafilegrowthPercent int = NULL, -- Crecimiento del archivo de datos en porcentaje (opcional)
+    @logfilename nvarchar(260),     -- Ruta completa del archivo de log (.ldf)
+    @logsizeMB int,                 -- Tamaño inicial del archivo de log (MB)
     @logfilegrowthMB int = NULL,    -- Crecimiento del archivo de log en MB (opcional)
-    @logfilegrowthPercent int = NULL, -- Crecimiento del archivo de log en porcentaje (opcional)
-    @datamaxsizeMB int = NULL,      -- Tamaño máximo del archivo de datos (MB, NULL para ilimitado)
-    @logmaxsizeMB int = NULL        -- Tamaño máximo del archivo de log (MB, NULL para ilimitado)
+    @logfilegrowthPercent int = NULL -- Crecimiento del archivo de log en porcentaje (opcional)
 AS
 BEGIN
     SET NOCOUNT ON;
 
     BEGIN TRY
+        -- Validación de parámetros
         IF @dbname IS NULL OR @datafilename IS NULL OR @logfilename IS NULL
         BEGIN
             RAISERROR('El nombre de la base de datos y las rutas de los archivos son obligatorios.', 16, 1);
@@ -176,43 +138,38 @@ BEGIN
             RETURN;
         END
 
+        -- Construir el comando SQL dinámico
         DECLARE @sql nvarchar(max);
 
         SET @sql = 
             N'CREATE DATABASE ' + QUOTENAME(@dbname) + N' ' +
             N'ON PRIMARY ' +
             N'( ' +
-            N'    NAME = ' + QUOTENAME(@dbname + N'_Data') + N', ' + 
+            N'    NAME = ' + QUOTENAME(@dbname + N'_Data') + N', ' + -- Nombre lógico del archivo de datos
             N'    FILENAME = ''' + @datafilename + N''', ' +
             N'    SIZE = ' + CAST(@datasizeMB AS nvarchar) + N'MB, ' +
             CASE 
-                WHEN @datafilegrowthMB IS NOT NULL THEN N'    FILEGROWTH = ' + CAST(@datafilegrowthMB AS nvarchar) + N'MB, '
-                ELSE N'    FILEGROWTH = ' + CAST(@datafilegrowthPercent AS nvarchar) + N'%, '
-            END +
-            CASE 
-                WHEN @datamaxsizeMB IS NOT NULL THEN N'    MAXSIZE = ' + CAST(@datamaxsizeMB AS nvarchar) + N'MB '
-                ELSE N'    MAXSIZE = UNLIMITED '
+                WHEN @datafilegrowthMB IS NOT NULL THEN N'    FILEGROWTH = ' + CAST(@datafilegrowthMB AS nvarchar) + N'MB '
+                ELSE N'    FILEGROWTH = ' + CAST(@datafilegrowthPercent AS nvarchar) + N'% '
             END +
             N') ' +
             N'LOG ON ' +
             N'( ' +
-            N'    NAME = ' + QUOTENAME(@dbname + N'_Log') + N', ' + 
+            N'    NAME = ' + QUOTENAME(@dbname + N'_Log') + N', ' + -- Nombre lógico del archivo de log
             N'    FILENAME = ''' + @logfilename + N''', ' +
             N'    SIZE = ' + CAST(@logsizeMB AS nvarchar) + N'MB, ' +
             CASE 
-                WHEN @logfilegrowthMB IS NOT NULL THEN N'    FILEGROWTH = ' + CAST(@logfilegrowthMB AS nvarchar) + N'MB, '
-                ELSE N'    FILEGROWTH = ' + CAST(@logfilegrowthPercent AS nvarchar) + N'%, '
-            END +
-            CASE 
-                WHEN @logmaxsizeMB IS NOT NULL THEN N'    MAXSIZE = ' + CAST(@logmaxsizeMB AS nvarchar) + N'MB '
-                ELSE N'    MAXSIZE = UNLIMITED '
+                WHEN @logfilegrowthMB IS NOT NULL THEN N'    FILEGROWTH = ' + CAST(@logfilegrowthMB AS nvarchar) + N'MB '
+                ELSE N'    FILEGROWTH = ' + CAST(@logfilegrowthPercent AS nvarchar) + N'% '
             END +
             N');';
 
+        -- Ejecutar el comando
         EXEC sp_executesql @sql;
 
     END TRY
     BEGIN CATCH
+        -- Manejo de errores
         DECLARE @ErrorMessage NVARCHAR(4000);
         DECLARE @ErrorSeverity INT;
         DECLARE @ErrorState INT;
